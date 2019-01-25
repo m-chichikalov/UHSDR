@@ -20,7 +20,8 @@
 #include "ui_configuration.h"
 #include "serial_eeprom.h"
 
-static uint8_t config_ramcache[MAX_VAR_ADDR*2+2];
+#define SIZE_RAM_CACHE ((MAX_VAR_ADDR)*2+2)
+static uint8_t config_ramcache[SIZE_RAM_CACHE];
 
 
 #ifdef USE_CONFIGSTORAGE_FLASH
@@ -102,15 +103,27 @@ uint16_t ConfigStorage_ReadVariable(uint16_t addr, uint16_t *value)
         break;
     case CONFIGSTORE_IN_USE_RAMCACHE:
     {
-        uint8_t lowbyte;
-        uint8_t highbyte;
-        uint16_t data;
+        uint32_t __addr = addr*2;
+        if ( __addr <= ( SIZE_RAM_CACHE - 2 ))
+        {
+            uint8_t lowbyte;
+            uint8_t highbyte;
+            uint16_t data;
 
-        highbyte = config_ramcache[addr*2];
-        lowbyte = config_ramcache[addr*2+1];
-        data = lowbyte + (highbyte<<8);
-        *value = data;
-        retval = 0;
+            highbyte = config_ramcache[__addr];
+            lowbyte = config_ramcache[__addr+1];
+            data = lowbyte + (highbyte<<8);
+            *value = data;
+            /**
+             * FIXME - in both cases it returns 0,
+             * so, no way to distinguish fail
+             */
+            retval = 0;
+        }
+        else
+        {
+            retval = 0;
+        }
         break;
     }
     default:
@@ -147,20 +160,21 @@ uint16_t ConfigStorage_WriteVariable(uint16_t addr, uint16_t value)
          * first two cells was corrupted.
          * Just temp. protection...
          */
-        if ( addr == 0 )
-        {
-            status = HAL_ERROR;
-        }
-        else
+        uint32_t __addr = addr*2;
+        if ( __addr <= ( SIZE_RAM_CACHE - 2 ) && __addr != 0)
         {
             uint8_t lowbyte;
             uint8_t highbyte;
 
             lowbyte = (uint8_t)((0x00FF)&value);
             highbyte = (uint8_t)((0x00FF)&(value >> 8));
-            config_ramcache[addr*2] = highbyte;
-            config_ramcache[addr*2+1] = lowbyte;
+            config_ramcache[__addr] = highbyte;
+            config_ramcache[__addr+1] = lowbyte;
             status = HAL_OK;
+        }
+        else
+        {
+            status = HAL_ERROR;
         }
     }
     return status;
